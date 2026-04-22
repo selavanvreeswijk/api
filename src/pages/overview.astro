@@ -1,0 +1,283 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+---
+
+<MainLayout title="Overview – SudokuTime">
+
+  <div class="overview">
+    <div class="header">
+      <h2>Your sessions</h2>
+      <a href="/" class="btn-new">+ New game</a>
+    </div>
+
+    <!-- Statistieken -->
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">Played</span>
+        <span class="stat-number" id="stat-played">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Solved</span>
+        <span class="stat-number" id="stat-solved">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Jokes earned</span>
+        <span class="stat-number" id="stat-jokes">0</span>
+      </div>
+    </div>
+
+    <!-- Filterknoppen -->
+    <div class="filters">
+      <button class="filter active" data-filter="all">All</button>
+      <button class="filter" data-filter="solved">Solved</button>
+      <button class="filter" data-filter="unsolved">Not solved</button>
+    </div>
+
+    <!-- Sessielijst — wordt gevuld door JavaScript -->
+    <ul class="session-list" id="session-list"></ul>
+
+    <p id="no-sessions" class="empty-text hidden">No sessions yet. <a href="/">Play a game!</a></p>
+  </div>
+
+</MainLayout>
+
+<script>
+  // @ts-nocheck
+
+  // Lees sessies uit localStorage
+  const sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
+
+  // Statistieken invullen
+  document.getElementById('stat-played').textContent = sessions.length;
+  document.getElementById('stat-solved').textContent = sessions.filter(s => s.solved).length;
+  document.getElementById('stat-jokes').textContent  = sessions.filter(s => s.joke).length;
+
+  // Huidige filter bijhouden
+  let currentFilter = 'all';
+
+  // Sessies weergeven op basis van filter
+  function renderSessions(filter) {
+    const list = document.getElementById('session-list');
+    list.innerHTML = '';
+
+    // Filter de sessies
+    const filtered = sessions.filter(s => {
+      if (filter === 'solved')   return s.solved;
+      if (filter === 'unsolved') return !s.solved;
+      return true; // 'all'
+    });
+
+    if (filtered.length === 0) {
+      document.getElementById('no-sessions').classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('no-sessions').classList.add('hidden');
+
+    // Maak een lijstitem aan per sessie (nieuwste eerst)
+    filtered.slice().reverse().forEach(session => {
+      const date    = new Date(session.date);
+      const hour    = date.getHours();
+      const icon    = (hour >= 6 && hour < 18) ? '☀️' : '🌙';
+
+      // Datum formatteren: "Today, 08:42" of "Mon 28 Apr, 23:05"
+      const isToday = new Date().toDateString() === date.toDateString();
+      const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = isToday
+        ? `Today, ${timeStr}`
+        : `${date.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeStr}`;
+
+      // Speeltijd berekenen in minuten
+      const minutes = session.endTime
+        ? Math.round((session.endTime - session.startTime) / 1000 / 60)
+        : null;
+
+      const li = document.createElement('li');
+      li.className = 'session-item';
+      li.innerHTML = `
+        <div class="session-left">
+          <span class="session-icon">${icon}</span>
+          <div>
+            <div class="session-date">${dateStr}</div>
+            <div class="session-sub">${session.solved ? `Solved in ${minutes} min` : 'Not solved'}</div>
+            ${session.joke ? `<div class="session-joke">"${session.joke}"</div>` : ''}
+          </div>
+        </div>
+        <span class="badge badge-${session.difficulty || 'medium'}">${session.difficulty || 'medium'}</span>
+      `;
+      list.appendChild(li);
+    });
+  }
+
+  // Filterknoppen koppelen
+  document.querySelectorAll('.filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderSessions(btn.dataset.filter);
+    });
+  });
+
+  // Eerste render
+  if (sessions.length === 0) {
+    document.getElementById('no-sessions').classList.remove('hidden');
+  } else {
+    renderSessions('all');
+  }
+</script>
+
+<style>
+  .overview {
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .header h2 {
+    color: #f7d1dc;
+    font-size: 1.2rem;
+  }
+
+  .btn-new {
+    background: #f7d1dc;
+    color: #2e2e2c;
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .btn-new:hover { background: white; }
+
+  /* Statistieken */
+  .stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat {
+    background: #3e3e3c;
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+  }
+
+  .stat-label {
+    color: #999;
+    font-size: 0.8rem;
+  }
+
+  .stat-number {
+    color: #f7d1dc;
+    font-size: 1.8rem;
+    font-weight: bold;
+  }
+
+  /* Filters */
+  .filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .filter {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+  }
+
+  .filter.active {
+    color: #f7d1dc;
+    font-weight: bold;
+  }
+
+  .filter:hover { color: #ccc; }
+
+  /* Sessielijst */
+  .session-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .session-item {
+    background: #3e3e3c;
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .session-left {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .session-icon { font-size: 1.2rem; margin-top: 2px; }
+
+  .session-date {
+    color: #f7d1dc;
+    font-size: 0.95rem;
+    font-weight: bold;
+  }
+
+  .session-sub {
+    color: #999;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+  }
+
+  .session-joke {
+    color: #aaa;
+    font-size: 0.78rem;
+    font-style: italic;
+    margin-top: 0.3rem;
+    max-width: 300px;
+    line-height: 1.4;
+  }
+
+  /* Badges per moeilijkheid */
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .badge-easy   { background: #c8f7c5; color: #2e2e2c; }
+  .badge-medium { background: #f7f0c5; color: #2e2e2c; }
+  .badge-hard   { background: #f7d1dc; color: #2e2e2c; }
+
+  .empty-text {
+    color: #999;
+    text-align: center;
+    margin-top: 2rem;
+    font-size: 0.95rem;
+  }
+
+  .empty-text a { color: #f7d1dc; }
+
+  .hidden { display: none; }
+</style>

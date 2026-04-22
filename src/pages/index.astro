@@ -1,0 +1,238 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import SudokuGrid from '../components/sudokuGrid.astro';
+
+// Lees de voorkeur uit de URL (bijv. /?preference=morning)
+const preference = Astro.url.searchParams.get('preference');
+
+// Hoe laat is het?
+const hour = new Date().getHours();
+
+// Moeilijkheid op basis van voorkeur + tijdstip
+let difficulty = 'medium';
+
+// Ochtendmens
+if (preference === 'morning') {
+  if (hour >= 6 && hour < 12)       difficulty = 'hard';
+  else if (hour >= 12 && hour < 18) difficulty = 'medium';
+  else                               difficulty = 'easy';
+
+// Avondmens
+} else if (preference === 'evening') {
+  if (hour >= 6 && hour < 12)       difficulty = 'easy';
+  else if (hour >= 12 && hour < 18) difficulty = 'medium';
+  else                               difficulty = 'hard';
+
+// Geen voorkeur: overdag medium, anders altijd hard
+} else if (preference === 'none') {
+  if (hour >= 12 && hour < 18) difficulty = 'medium';
+  else                          difficulty = 'hard';
+}
+
+// Sudoku ophalen (alleen als voorkeur bekend is)
+let puzzle: number[] | null = null;
+let solution: number[] | null = null;
+let apiError: string | null = null;
+if (preference) {
+  const key = import.meta.env.SUDOKU_KEY;
+  const url = `https://api.api-ninjas.com/v1/sudokugenerate?difficulty=${difficulty}`;
+  const response = await fetch(url, { headers: { "X-Api-Key": key } });
+  const data = await response.json();
+  if (data.puzzle) {
+    puzzle = data.puzzle.flat();
+    solution = data.solution.flat();
+  } else {
+    apiError = JSON.stringify(data);
+  }
+}
+---
+
+<MainLayout title="SudokuTime">
+
+  {apiError && <p style="color: salmon;">API apiError: {apiError}</p>}
+
+  {puzzle && (
+    <>
+      <p class="difficulty-label">Difficulty: <strong>{difficulty}</strong></p>
+      <!-- difficulty meegeven zodat we het kunnen opslaan in de sessie -->
+      <SudokuGrid puzzle={puzzle} solution={solution} difficulty={difficulty} />
+      <button id="btn-check">Check</button>
+      <p id="result"></p>
+      <p id="joke"></p>
+
+      <div class="test-links">
+        <a id="btn-fill" href="#">fill in</a>
+        <a id="btn-reset" href="#">reset</a>
+      </div>
+    </>
+  )}
+
+  <!-- Popup shown when no preference has been set yet -->
+  <div id="popup" class="popup hidden">
+    <div class="popup-content">
+      <h2>Welcome!</h2>
+      <p>Are you a morning or evening person?<br/>This determines the difficulty of your sudoku.</p>
+      <div class="buttons">
+        <button id="btn-morning">Morning person</button>
+        <button id="btn-evening">Evening person</button>
+        <button id="btn-none">No preference</button>
+      </div>
+    </div>
+  </div>
+
+</MainLayout>
+
+<script>
+  // @ts-nocheck
+
+  // Controleer of er al een voorkeur is opgeslagen
+  const savedPreference = localStorage.getItem('preference');
+
+  if (!savedPreference) {
+    // Geen voorkeur gevonden — toon de popup
+    document.getElementById('popup').classList.remove('hidden');
+
+  } else if (!window.location.search.includes('preference')) {
+    // Voorkeur opgeslagen maar nog niet in de URL — doorsturen
+    window.location.href = `/?preference=${savedPreference}`;
+  }
+
+  // Klikken op knoppen in de popup
+  document.getElementById('btn-morning').addEventListener('click', () => {
+    localStorage.setItem('preference', 'morning');
+    window.location.href = '/?preference=morning';
+  });
+
+  document.getElementById('btn-evening').addEventListener('click', () => {
+    localStorage.setItem('preference', 'evening');
+    window.location.href = '/?preference=evening';
+  });
+
+  document.getElementById('btn-none').addEventListener('click', () => {
+    localStorage.setItem('preference', 'none');
+    window.location.href = '/?preference=none';
+  });
+
+  // Sla een nieuwe sessie op als er een puzzel geladen is
+  // sessionStorage voorkomt dat elke refresh een nieuwe sessie aanmaakt
+  if (window.location.search.includes('preference') && !sessionStorage.getItem('sessionStarted')) {
+    sessionStorage.setItem('sessionStarted', 'true');
+
+    const sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
+    const newSession = {
+      date: new Date().toISOString(),
+      preference: savedPreference,
+      solved: false,
+      startTime: Date.now(),
+      joke: null
+    };
+    sessions.push(newSession);
+    localStorage.setItem('sessions', JSON.stringify(sessions));
+
+    // Sla de startTime op zodat we weten welke sessie de huidige is
+    localStorage.setItem('currentSession', String(newSession.startTime));
+  }
+
+  // Verwijder opgeslagen voorkeur zodat de popup weer verschijnt
+  document.getElementById('btn-reset')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem('preference');
+    window.location.href = '/';
+  });
+</script>
+
+<style>
+  #btn-check {
+    margin-top: 1rem;
+    background: #f7d1dc;
+    color: #2e2e2c;
+    border: none;
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  #btn-check:hover { background: white; }
+
+  #result {
+    margin-top: 0.75rem;
+    color: #f7d1dc;
+    font-size: 1rem;
+    min-height: 1.5rem;
+  }
+
+  #joke {
+    margin-top: 0.5rem;
+    color: #f7d1dc;
+    font-style: italic;
+    font-size: 0.95rem;
+    max-width: 432px;
+    line-height: 1.5;
+  }
+
+  .difficulty-label {
+    color: #f7d1dc;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    text-transform: capitalize;
+  }
+
+  .test-links {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .test-links a {
+    color: #555;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .test-links a:hover { color: #aaa; }
+
+  /* Popup */
+  .popup {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hidden { display: none; }
+
+  .popup-content {
+    background: #3e3e3c;
+    color: #f7d1dc;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 320px;
+  }
+
+  .popup-content h2 { margin-bottom: 0.5rem; }
+  .popup-content p  { margin-bottom: 1.5rem; line-height: 1.5; }
+
+  .buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .buttons button {
+    background: #f7d1dc;
+    color: #2e2e2c;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .buttons button:hover { background: white; }
+</style>

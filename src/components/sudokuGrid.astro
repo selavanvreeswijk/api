@@ -1,0 +1,162 @@
+---
+const { puzzle, solution, difficulty } = Astro.props;
+---
+
+<div class="sudoku-grid" data-difficulty={difficulty}>
+  {puzzle.map((cell, index) => (
+    // Number(cel) zet de waarde om naar een getal zodat "0" en 0 hetzelfde zijn
+    // Hier heeft chatGPT me bij geholpen omdat die eerst de inputvelden een divje maakte
+    // Prompt: ik heb bij een sudoku api deze code gebruikt en het zou een invoerveld moeten zijn alleen kan ik niks invullen op de velden, hoe kan dat en hoe los ik het op?
+    Number(cell) !== 0
+      ? <div class="cell fixed">{cell}</div>
+      : <input
+          class="cell empty"
+          type="number"
+          min="1"
+          max="9"
+          data-index={index}
+          data-solution={solution[index]}
+        />
+  ))}
+</div>
+
+<script>
+  // @ts-nocheck
+
+  const inputs = document.querySelectorAll('.cell.empty');
+
+  inputs.forEach((input, i) => {
+    input.addEventListener('input', (e) => {
+      // Verwijder alles wat geen cijfer 1-9 is
+      const value = e.target.value.replace(/[^1-9]/g, '');
+      // Bewaar alleen het laatste cijfer zodat je niet twee cijfers kunt typen
+      e.target.value = value.slice(-1);
+
+      // Verwijder eventuele kleur van een vorige controle
+      e.target.classList.remove('correct', 'incorrect');
+    });
+  });
+
+  const checkButton = document.getElementById('btn-check');
+  const resultText = document.getElementById('result');
+
+  // Vul alle lege velden in met het juiste antwoord (alleen voor testen)
+  document.getElementById('btn-fill')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    inputs.forEach((input) => {
+      input.value = input.dataset.solution;
+      input.classList.remove('correct', 'incorrect');
+    });
+  });
+
+  // ?. zodat er geen crash is als de knop niet op de pagina staat
+  checkButton?.addEventListener('click', () => {
+    let incorrectCount = 0;
+
+    inputs.forEach((input) => {
+      const entered  = Number(input.value);
+      const expected = Number(input.dataset.solution);
+
+      // Verwijder eerst oude kleuren
+      input.classList.remove('correct', 'incorrect');
+
+      if (input.value === '') {
+        // Leeg gelaten: geen kleur
+      } else if (entered === expected) {
+        input.classList.add('correct');
+      } else {
+        input.classList.add('incorrect');
+        incorrectCount++;
+      }
+    });
+
+    // Resultaat weergeven
+    if (incorrectCount === 0) {
+      // Controleer of alle lege cellen ook echt zijn ingevuld
+      const allFilled = Array.from(inputs).every(input => input.value !== '');
+
+      if (allFilled) {
+        resultText.textContent = 'All correct!';
+
+        // Haal een dad joke op als beloning
+        fetch('https://icanhazdadjoke.com/', {
+          headers: { 'Accept': 'application/json' }
+        })
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('joke').textContent = data.joke;
+
+          // Sla de opgeloste sessie op in localStorage
+          const sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
+          const currentStart = Number(localStorage.getItem('currentSession'));
+          const session = sessions.find(s => s.startTime === currentStart);
+          if (session) {
+            session.solved = true;
+            session.endTime = Date.now();
+            session.difficulty = document.querySelector('.sudoku-grid').dataset.difficulty;
+            session.joke = data.joke;
+            localStorage.setItem('sessions', JSON.stringify(sessions));
+          }
+        });
+
+      } else {
+        resultText.textContent = 'Almost! Some cells are still empty.';
+      }
+
+    } else {
+      resultText.textContent = `${incorrectCount} cell${incorrectCount === 1 ? '' : 's'} are incorrect.`;
+    }
+  });
+</script>
+
+<style is:global>
+  .sudoku-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 48px);
+    grid-template-rows: repeat(9, 48px);
+    width: 432px;
+    border: 2px solid black;
+    overflow: hidden;
+  }
+
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 48px;
+    height: 48px;
+    min-width: 0;
+
+    border: 1px solid #ccc;
+    font-size: 1.2rem;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .cell:nth-child(3n) { border-right: 2px solid black; }
+  .cell:nth-child(n+19):nth-child(-n+27) { border-bottom: 2px solid black; }
+  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid black; }
+
+  .fixed {
+    background: #eeebeb;
+    font-weight: bold;
+  }
+
+  .empty {
+    border: none;
+    width: 48px;
+    height: 48px;
+    text-align: center;
+    font-size: 1.2rem;
+    background: white;
+    box-sizing: border-box;
+    padding: 0;
+  }
+
+  .empty::-webkit-inner-spin-button,
+  .empty::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .empty.correct   { background: #c8f7c5; }
+  .empty.incorrect { background: #f7c5c5; }
+</style>
