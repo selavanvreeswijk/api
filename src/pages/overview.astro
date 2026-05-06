@@ -33,10 +33,11 @@ import MainLayout from '../layouts/MainLayout.astro';
       <button class="filter" data-filter="unsolved">Not solved</button>
     </div>
 
-    <!-- Sessielijst — wordt gevuld door JavaScript -->
+    <!-- Sessieslijst -->
     <ul class="session-list" id="session-list"></ul>
 
-    <p id="no-sessions" class="empty-text hidden">No sessions yet. <a href="/">Play a game!</a></p>
+    <p id="no-sessions" class="empty-text hidden">No sessions yet. 
+    <a href="/">Play a game!</a></p>
   </div>
 
 </MainLayout>
@@ -44,27 +45,33 @@ import MainLayout from '../layouts/MainLayout.astro';
 <script>
   // @ts-nocheck
 
-  // Lees sessies uit localStorage
+  // ------------------------------------ MARK: Sessies lezen
+  // Bron: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
   const sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
 
-  // Statistieken invullen
+  // ------------------------------------ MARK: Statistieken
   document.getElementById('stat-played').textContent = sessions.length;
-  document.getElementById('stat-solved').textContent = sessions.filter(s => s.solved).length;
-  document.getElementById('stat-jokes').textContent  = sessions.filter(s => s.joke).length;
 
-  // Huidige filter bijhouden
-  let currentFilter = 'all';
+  const solved = sessions.filter(s => {
+    return s.solved;
+  });
+  document.getElementById('stat-solved').textContent = solved.length;
 
-  // Sessies weergeven op basis van filter
+  const withJoke = sessions.filter(s => {
+    return s.joke;
+  });
+  document.getElementById('stat-jokes').textContent = withJoke.length;
+
+  // ------------------------------------ MARK: Sessies renderen
   function renderSessions(filter) {
     const list = document.getElementById('session-list');
+
     list.innerHTML = '';
 
-    // Filter de sessies
     const filtered = sessions.filter(s => {
-      if (filter === 'solved')   return s.solved;
-      if (filter === 'unsolved') return !s.solved;
-      return true; // 'all'
+      if (filter === 'solved')   return s.solved;     // Alleen opgeloste
+      if (filter === 'unsolved') return !s.solved;    // Alleen niet opgeloste
+      return true;                                    // Alles
     });
 
     if (filtered.length === 0) {
@@ -74,24 +81,31 @@ import MainLayout from '../layouts/MainLayout.astro';
 
     document.getElementById('no-sessions').classList.add('hidden');
 
-    // Maak een lijstitem aan per sessie (nieuwste eerst)
+    // Nieuwste sessies bovenaan
+    // Bron: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse
     filtered.slice().reverse().forEach(session => {
-      const date    = new Date(session.date);
-      const hour    = date.getHours();
-      const icon    = (hour >= 6 && hour < 18) ? '☀️' : '🌙';
+      const date = new Date(session.date);
+      const hour = date.getHours();
+      const icon = (hour >= 6 && hour < 18) ? '☀️' : '🌙';
 
-      // Datum formatteren: "Today, 08:42" of "Mon 28 Apr, 23:05"
+      // Datum formatteren: vandaag of dag + datum
+      // Bron: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleDateString
       const isToday = new Date().toDateString() === date.toDateString();
-      const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+      const timeStr = date.toLocaleTimeString('en', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+
       const dateStr = isToday
         ? `Today, ${timeStr}`
         : `${date.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeStr}`;
 
-      // Speeltijd berekenen in minuten
       const minutes = session.endTime
         ? Math.round((session.endTime - session.startTime) / 1000 / 60)
         : null;
 
+      // Lijstitem aanmaken en vullen met sessiedata
+      // Bron: https://developer.mozilla.org/en-US/docs/Web/API/Document/createElement
       const li = document.createElement('li');
       li.className = 'session-item';
       li.innerHTML = `
@@ -109,16 +123,18 @@ import MainLayout from '../layouts/MainLayout.astro';
     });
   }
 
-  // Filterknoppen koppelen
+  // ------------------------------------ MARK: Filterknoppen
   document.querySelectorAll('.filter').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.filter').forEach(b => {
+        b.classList.remove('active');
+      });
       btn.classList.add('active');
       renderSessions(btn.dataset.filter);
     });
   });
 
-  // Eerste render
+  // Eerste render bij het laden van de pagina
   if (sessions.length === 0) {
     document.getElementById('no-sessions').classList.remove('hidden');
   } else {
@@ -126,158 +142,210 @@ import MainLayout from '../layouts/MainLayout.astro';
   }
 </script>
 
-<style>
-  .overview {
+<style is:global>
+  .overview{
     width: 100%;
     max-width: 480px;
   }
 
-  .header {
+  .header{
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.5em;
   }
 
-  .header h2 {
-    color: #f7d1dc;
-    font-size: 1.2rem;
+  .header h2{
+    color: var(--pink);
+    font-size: 1.2em;
   }
 
-  .btn-new {
-    background: #f7d1dc;
-    color: #2e2e2c;
-    border: none;
-    padding: 0.4rem 1rem;
-    border-radius: 8px;
-    font-size: 0.9rem;
+  .btn-new{
+    background: transparent;
+    color: var(--pink);
+    border: 1.5px solid var(--pink);
+    border-radius: 50px;
+    font-size: 0.9em;
     text-decoration: none;
     cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+
+    padding: 0.4em 1em;
   }
 
-  .btn-new:hover { background: white; }
+  .btn-new:hover{
+    background: var(--pink);
+    color: var(--dark);
+    transform: scale(1.04);
+  }
 
   /* Statistieken */
-  .stats {
+  .stats{
     display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: 1em;
+    margin-bottom: 1.5em;
   }
 
-  .stat {
-    background: #3e3e3c;
-    border-radius: 10px;
-    padding: 1rem 1.5rem;
+  .stat{
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+
+    background: var(--card);
+    border-radius: 10px;
     flex: 1;
+    border: 1px solid var(--border);
+
+    gap: 0.3em;
+    padding: 1em 1.5em;
   }
 
-  .stat-label {
-    color: #999;
-    font-size: 0.8rem;
+  .stat-label{
+    color: var(--grey);
+    font-size: 0.8em;
   }
 
-  .stat-number {
-    color: #f7d1dc;
-    font-size: 1.8rem;
+  .stat-number{
+    color: var(--pink);
+    font-size: 1.8em;
     font-weight: bold;
   }
 
-  /* Filters */
-  .filters {
+  /* Filterknoppen */
+  .filters{
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+
+    gap: 0.5em;
+    margin-bottom: 1em;
   }
 
-  .filter {
+  .filter{
     background: none;
-    border: none;
-    color: #999;
-    font-size: 0.95rem;
+    border: 1.5px solid var(--border-light);
+    color: var(--mid-grey);
+    font-size: 0.85em;
     cursor: pointer;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
+    border-radius: 50px;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+
+    padding: 0.3em 0.9em;
   }
 
-  .filter.active {
-    color: #f7d1dc;
+  .filter.active{
+    color: var(--dark);
+    background: var(--pink);
+    border-color: var(--pink);
     font-weight: bold;
   }
 
-  .filter:hover { color: #ccc; }
+  .filter:hover:not(.active){
+    border-color: var(--grey);
+    color: var(--light-grey);
+  }
 
   /* Sessielijst */
-  .session-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+  .session-list{
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+
+    list-style: none;
+
+    gap: 0.5em;
+    padding: 0;
+    margin: 0;
   }
 
-  .session-item {
-    background: #3e3e3c;
-    border-radius: 10px;
-    padding: 1rem;
+  .session-item{
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+
+    background: var(--card);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    transition: background 0.15s ease;
+
+    padding: 1em;
   }
 
-  .session-left {
+  .session-item:hover{
+    background: var(--card-hover);
+  }
+
+  .session-left{
     display: flex;
-    gap: 0.75rem;
     align-items: flex-start;
+
+    gap: 0.75em;
   }
 
-  .session-icon { font-size: 1.2rem; margin-top: 2px; }
+  .session-icon{
+    font-size: 1.2em;
 
-  .session-date {
-    color: #f7d1dc;
-    font-size: 0.95rem;
+    margin-top: 2px;
+  }
+
+  .session-date{
+    color: var(--pink);
+    font-size: 0.95em;
     font-weight: bold;
   }
 
-  .session-sub {
-    color: #999;
-    font-size: 0.8rem;
-    margin-top: 0.2rem;
+  .session-sub{
+    color: var(--grey);
+    font-size: 0.8em;
+
+    margin-top: 0.2em;
   }
 
-  .session-joke {
-    color: #aaa;
-    font-size: 0.78rem;
+  .session-joke{
+    color: var(--light-grey);
     font-style: italic;
-    margin-top: 0.3rem;
-    max-width: 300px;
     line-height: 1.4;
+    font-size: 0.78em;
+    max-width: 300px;
+
+    margin-top: 0.3em;
   }
 
-  /* Badges per moeilijkheid */
-  .badge {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.7rem;
-    border-radius: 20px;
+  /* Moeilijkheidsbadges */
+  .badge{
+    font-size: 0.75em;
     font-weight: bold;
+    border-radius: 20px;
     white-space: nowrap;
+
+    padding: 0.2em 0.7em;
   }
 
-  .badge-easy   { background: #c8f7c5; color: #2e2e2c; }
-  .badge-medium { background: #f7f0c5; color: #2e2e2c; }
-  .badge-hard   { background: #f7d1dc; color: #2e2e2c; }
+  .badge-easy{
+    background: var(--badge-green);
+    color: var(--dark);
+  }
 
-  .empty-text {
-    color: #999;
+  .badge-medium{
+    background: var(--badge-yellow);
+    color: var(--dark);
+  }
+
+  .badge-hard{
+    background: var(--pink);
+    color: var(--dark);
+  }
+
+  .empty-text{
+    color: var(--grey);
     text-align: center;
-    margin-top: 2rem;
-    font-size: 0.95rem;
+    font-size: 0.95em;
+
+    margin-top: 2em;
   }
 
-  .empty-text a { color: #f7d1dc; }
+  .empty-text a{
+    color: var(--pink);
+  }
 
-  .hidden { display: none; }
+  .hidden{
+    display: none;
+  }
 </style>

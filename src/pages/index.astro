@@ -1,44 +1,49 @@
 ---
+// @ts-nocheck
+
 import MainLayout from '../layouts/MainLayout.astro';
 import SudokuGrid from '../components/sudokuGrid.astro';
 
-// Lees de voorkeur uit de URL (bijv. /?preference=morning)
+// ------------------------------------ MARK: Moeilijkheidsgraad
 const preference = Astro.url.searchParams.get('preference');
-
-// Hoe laat is het?
 const hour = new Date().getHours();
+// Bron: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date
 
-// Moeilijkheid op basis van voorkeur + tijdstip
 let difficulty = 'medium';
 
-// Ochtendmens
+// Ochtendmens = ochtend moeilijkst, avondmens = avond moeilijkst
 if (preference === 'morning') {
   if (hour >= 6 && hour < 12)       difficulty = 'hard';
   else if (hour >= 12 && hour < 18) difficulty = 'medium';
-  else                               difficulty = 'easy';
+  else                              difficulty = 'easy';
 
-// Avondmens
 } else if (preference === 'evening') {
   if (hour >= 6 && hour < 12)       difficulty = 'easy';
   else if (hour >= 12 && hour < 18) difficulty = 'medium';
-  else                               difficulty = 'hard';
+  else                              difficulty = 'hard';
 
-// Geen voorkeur: overdag medium, anders altijd hard
 } else if (preference === 'none') {
-  if (hour >= 12 && hour < 18) difficulty = 'medium';
-  else                          difficulty = 'hard';
+  if (hour >= 12 && hour < 18)      difficulty = 'medium';
+  else                              difficulty = 'hard';
 }
 
-// Sudoku ophalen (alleen als voorkeur bekend is)
-let puzzle: number[] | null = null;
-let solution: number[] | null = null;
-let apiError: string | null = null;
+// ------------------------------------ MARK: Sudoku ophalen
+let puzzle = null;
+let solution = null;
+let apiError = null;
+
+// Ophalen zodra voorkeur bekend is
 if (preference) {
+  // Bron: Jad heeft me hierbij geholpen met de API-sleutel
   const key = import.meta.env.SUDOKU_KEY;
   const url = `https://api.api-ninjas.com/v1/sudokugenerate?difficulty=${difficulty}`;
   const response = await fetch(url, { headers: { "X-Api-Key": key } });
+
   const data = await response.json();
   if (data.puzzle) {
+    // flat() zet de geneste rijen om naar één array
+    // Bron: Claude. Prompt: ik krijg x data uit mijn API maar ik krijg de getallen niet in deze x grid. Hoe kan ik dat wel doen?
+    // & https://dev.to/dillionmegida/arrayflat-for-flatting-nested-arrays-within-an-array-3d1o
     puzzle = data.puzzle.flat();
     solution = data.solution.flat();
   } else {
@@ -49,17 +54,20 @@ if (preference) {
 
 <MainLayout title="SudokuTime">
 
-  {apiError && <p style="color: salmon;">API apiError: {apiError}</p>}
+  {apiError && <p style="color: salmon;">API error: {apiError}</p>}
 
+  <!-- ------------------------------------ MARK: Sudoku Grid
+  -->
   {puzzle && (
     <>
       <p class="difficulty-label">Difficulty: <strong>{difficulty}</strong></p>
-      <!-- difficulty meegeven zodat we het kunnen opslaan in de sessie -->
+      {/* Sudoku grid component, met puzzel, oplossing en niveau als props */}
       <SudokuGrid puzzle={puzzle} solution={solution} difficulty={difficulty} />
+
       <button id="btn-check">Check</button>
       <p id="result"></p>
-      <p id="joke"></p>
 
+      {/* Voor testen */}
       <div class="test-links">
         <a id="btn-fill" href="#">fill in</a>
         <a id="btn-reset" href="#">reset</a>
@@ -67,15 +75,37 @@ if (preference) {
     </>
   )}
 
-  <!-- Popup shown when no preference has been set yet -->
+  <!-- ------------------------------------ MARK: Geen voorkeur Popup
+  -->
   <div id="popup" class="popup hidden">
     <div class="popup-content">
       <h2>Welcome!</h2>
-      <p>Are you a morning or evening person?<br/>This determines the difficulty of your sudoku.</p>
+      
+      <p>Are you a morning or evening person?</p>
+      <p class="popup-sub">This determines the difficulty of your sudoku.</p>
+
       <div class="buttons">
         <button id="btn-morning">Morning person</button>
         <button id="btn-evening">Evening person</button>
-        <button id="btn-none">No preference</button>
+      </div>
+
+      <a id="btn-none" href="#" class="no-preference">No preference</a>
+    </div>
+  </div>
+
+  <!-- ------------------------------------ MARK: Dad Joke Popup
+  -->
+  <div id="joke-bg" class="joke-bg verborgen">
+    <div class="joke-box">
+      <p class="joke-label">Sudoku solved!</p>
+      <h2 class="joke-title">Your reward joke:</h2>
+
+      <p id="joke-vraag" class="joke-text"></p>
+      <p id="joke-antwoord" class="joke-answer"></p>
+
+      <div class="joke-buttons">
+        <button id="btn-again" class="joke-btn">Play again</button>
+        <a href="/overview" class="joke-btn joke-btn-outline">See overview</a>
       </div>
     </div>
   </div>
@@ -85,19 +115,19 @@ if (preference) {
 <script>
   // @ts-nocheck
 
-  // Controleer of er al een voorkeur is opgeslagen
+  // ------------------------------------ MARK: Voorkeur checken
   const savedPreference = localStorage.getItem('preference');
 
   if (!savedPreference) {
-    // Geen voorkeur gevonden — toon de popup
+    // Geen voorkeur opgeslagen = welkomstpopup tonen
     document.getElementById('popup').classList.remove('hidden');
 
   } else if (!window.location.search.includes('preference')) {
-    // Voorkeur opgeslagen maar nog niet in de URL — doorsturen
+    // Al een voorkeur maar nog niet in URL = doorsturen
     window.location.href = `/?preference=${savedPreference}`;
   }
 
-  // Klikken op knoppen in de popup
+  // Voorkeur opslaan en doorsturen na keuze
   document.getElementById('btn-morning').addEventListener('click', () => {
     localStorage.setItem('preference', 'morning');
     window.location.href = '/?preference=morning';
@@ -108,13 +138,14 @@ if (preference) {
     window.location.href = '/?preference=evening';
   });
 
-  document.getElementById('btn-none').addEventListener('click', () => {
+  document.getElementById('btn-none').addEventListener('click', (e) => {
+    e.preventDefault();
     localStorage.setItem('preference', 'none');
     window.location.href = '/?preference=none';
   });
 
-  // Sla een nieuwe sessie op als er een puzzel geladen is
-  // sessionStorage voorkomt dat elke refresh een nieuwe sessie aanmaakt
+  // ------------------------------------ MARK: Sessie opslaan
+  // sessionStorage voorkomt dat een page refresh een nieuwe sessie aanmaakt
   if (window.location.search.includes('preference') && !sessionStorage.getItem('sessionStarted')) {
     sessionStorage.setItem('sessionStarted', 'true');
 
@@ -126,14 +157,13 @@ if (preference) {
       startTime: Date.now(),
       joke: null
     };
+
     sessions.push(newSession);
     localStorage.setItem('sessions', JSON.stringify(sessions));
-
-    // Sla de startTime op zodat we weten welke sessie de huidige is
     localStorage.setItem('currentSession', String(newSession.startTime));
   }
 
-  // Verwijder opgeslagen voorkeur zodat de popup weer verschijnt
+  // Reset: voorkeur verwijderen zodat de popup weer verschijnt
   document.getElementById('btn-reset')?.addEventListener('click', (e) => {
     e.preventDefault();
     localStorage.removeItem('preference');
@@ -142,97 +172,302 @@ if (preference) {
 </script>
 
 <style>
-  #btn-check {
-    margin-top: 1rem;
-    background: #f7d1dc;
-    color: #2e2e2c;
+  #btn-check{
+    background: var(--pink);
+    color: var(--dark);
     border: none;
-    padding: 0.6rem 1.4rem;
-    border-radius: 8px;
-    font-size: 1rem;
+    border-radius: 50px;
+    font-size: clamp(0.9em, 2.5vw, 1em);
+    font-weight: bold;
+    letter-spacing: 0.04em;
     cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 14px rgba(247, 209, 220, 0.25);
+
+    margin-top: 1.25em;
+    padding: clamp(0.6em, 2vw, 0.75em) clamp(1.5em, 5vw, 2.5em);
   }
 
-  #btn-check:hover { background: white; }
-
-  #result {
-    margin-top: 0.75rem;
-    color: #f7d1dc;
-    font-size: 1rem;
-    min-height: 1.5rem;
+  #btn-check:hover{
+    background: white;
+    transform: scale(1.04);
+    box-shadow: 0 6px 20px rgba(247, 209, 220, 0.35);
   }
 
-  #joke {
-    margin-top: 0.5rem;
-    color: #f7d1dc;
-    font-style: italic;
-    font-size: 0.95rem;
-    max-width: 432px;
-    line-height: 1.5;
+  #btn-check:active{
+    transform: scale(0.98);
   }
 
-  .difficulty-label {
-    color: #f7d1dc;
-    margin-bottom: 1rem;
-    font-size: 1rem;
+  #result{
+    color: var(--pink);
+    font-size: clamp(0.85em, 2.5vw, 0.95em);
+    min-height: 1.5em;
+    opacity: 0.85;
+
+    margin-top: 0.75em;
+  }
+
+  .difficulty-label{
+    color: var(--grey);
+    font-size: clamp(0.75em, 2vw, 0.85em);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+
+    margin-bottom: 1em;
+  }
+
+  .difficulty-label strong{
+    color: var(--pink);
     text-transform: capitalize;
   }
 
-  .test-links {
+  .test-links{
     display: flex;
-    gap: 1rem;
-    margin-top: 1rem;
+
+    margin-top: 1.25em;
+    gap: 1em;
   }
 
-  .test-links a {
-    color: #555;
-    font-size: 0.8rem;
+  .test-links a{
+    color: var(--line-thick);
+    font-size: 0.75em;
     text-decoration: underline;
     cursor: pointer;
+    transition: color 0.15s ease;
   }
 
-  .test-links a:hover { color: #aaa; }
+  .test-links a:hover{
+    color: var(--mid-grey);
+  }
 
-  /* Popup */
-  .popup {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+  /* Welkomstpopup */
+  .popup{
     display: flex;
     align-items: center;
     justify-content: center;
+
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+
+    padding: 1em;
   }
 
-  .hidden { display: none; }
+  .hidden{
+    display: none;
+  }
 
-  .popup-content {
-    background: #3e3e3c;
-    color: #f7d1dc;
-    padding: 2rem;
-    border-radius: 12px;
+  .popup-content{
+    background: var(--card);
+    color: var(--pink);
+    border: 1px solid var(--border);
+    border-radius: 16px;
     text-align: center;
-    max-width: 320px;
+    animation: popupIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    width: 100%;
+    max-width: 400px;
+
+    padding: clamp(1.25em, 4vw, 2.5em) clamp(0.75em, 3vw, 2em);
   }
 
-  .popup-content h2 { margin-bottom: 0.5rem; }
-  .popup-content p  { margin-bottom: 1.5rem; line-height: 1.5; }
+  @keyframes popupIn{
 
-  .buttons {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
+    from{ 
+      opacity: 0; 
+      transform: scale(0.9) translateY(10px); 
+    }
+
+    to{ 
+      opacity: 1; 
+      transform: scale(1)   translateY(0); 
+    }
+    
   }
 
-  .buttons button {
-    background: #f7d1dc;
-    color: #2e2e2c;
-    border: none;
-    padding: 0.6rem 1.2rem;
-    border-radius: 8px;
-    font-size: 1rem;
+  .popup-content h2{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.25em, 5vw, 1.6em);
+
+    margin-bottom: 0.5em;
+  }
+
+  .popup-content p{
+    color: var(--light-grey);
+    line-height: 1.6;
+    font-size: clamp(0.85em, 2.5vw, 0.95em);
+
+    margin-bottom: 0.4em;
+  }
+
+  .popup-content .popup-sub{
+    color: var(--grey);
+    font-style: italic;
+    font-size: clamp(0.72em, 2vw, 0.78em);
+
+    margin-bottom: 1.5em;
+  }
+
+  .buttons{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+
+    margin-top: 1.2em;
+    gap: 0.6em;
+  }
+
+  .buttons button{
+    background: transparent;
+    color: var(--pink);
+    border: 1.5px solid var(--pink);
+    border-radius: 50px;
+    font-size: clamp(0.7em, 2.2vw, 0.9em);
     cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    line-height: 1.3;
+
+    padding: clamp(0.5em, 2vw, 0.7em) clamp(0.3em, 1.5vw, 0.8em);
   }
 
-  .buttons button:hover { background: white; }
+  .buttons button:hover{
+    background: var(--pink);
+    color: var(--dark);
+    transform: scale(1.04);
+  }
+
+  .no-preference{
+    display: inline-block;
+
+    color: var(--light-grey);
+    font-size: 0.78em;
+    text-decoration: underline;
+    cursor: pointer;
+
+    margin-top: 1.1em;
+  }
+
+  .no-preference:hover{
+    color: var(--pink);
+  }
+
+  /* Joke popup */
+  .joke-bg{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 100;
+
+    padding: 1em;
+  }
+
+  .joke-bg.verborgen{ 
+    display: none; 
+  }
+
+  .joke-box{
+    background: var(--popup-dark);
+    border: 1px solid var(--pink);
+    border-radius: 16px;
+    text-align: center;
+    animation: slideIn 0.4s ease;
+    width: 100%;
+    max-width: 480px;
+
+    padding: clamp(1.5em, 6vw, 40px);
+  }
+
+  @keyframes slideIn{
+
+    from{ 
+      transform: translateY(40px); 
+      opacity: 0; 
+    }
+
+    to{ 
+      transform: translateY(0);    
+      opacity: 1; 
+    }
+
+  }
+
+  .joke-label{
+    color: var(--pink);
+    font-size: clamp(10px, 2.5vw, 12px);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+
+    margin-bottom: 8px;
+  }
+
+  .joke-title{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-size: clamp(1.4em, 5vw, 2em);
+    color: var(--cream);
+
+    margin-bottom: 1.5em;
+  }
+
+  .joke-text{
+    color: var(--cream);
+    font-style: italic;
+    line-height: 1.6;
+    font-size: clamp(0.95em, 3vw, 1.1em);
+  }
+
+  .joke-answer{
+    color: var(--cream);
+    line-height: 1.6;
+    font-size: clamp(0.95em, 3vw, 1.1em);
+
+    margin-top: 1em;
+    margin-bottom: 2em;
+  }
+
+  .joke-buttons{
+    display: flex;
+    justify-content: center;
+
+    gap: 0.75em;
+  }
+
+  .joke-btn{
+    flex: 1;
+
+    background: var(--pink);
+    color: var(--dark);
+    border: none;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: clamp(0.8em, 2.5vw, 0.85em);
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    text-align: center;
+    transition: background 0.2s ease, transform 0.15s ease;
+
+    padding: clamp(0.6em, 2vw, 12px) clamp(1em, 4vw, 28px);
+  }
+
+  .joke-btn:hover{ 
+    background: var(--pink-light); 
+    transform: scale(1.04); 
+  }
+
+  .joke-btn-outline{
+    background: transparent;
+    color: var(--pink);
+    border: 1.5px solid var(--pink);
+  }
+
+  .joke-btn-outline:hover{
+    background: var(--pink);
+    color: var(--dark);
+  }
 </style>

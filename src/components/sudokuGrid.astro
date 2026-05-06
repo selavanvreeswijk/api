@@ -2,11 +2,9 @@
 const { puzzle, solution, difficulty } = Astro.props;
 ---
 
+<!-- Moeilijkheidsgraad wordt bepaald en puzzeldata wordt ontvangen -->
 <div class="sudoku-grid" data-difficulty={difficulty}>
   {puzzle.map((cell, index) => (
-    // Number(cel) zet de waarde om naar een getal zodat "0" en 0 hetzelfde zijn
-    // Hier heeft chatGPT me bij geholpen omdat die eerst de inputvelden een divje maakte
-    // Prompt: ik heb bij een sudoku api deze code gebruikt en het zou een invoerveld moeten zijn alleen kan ik niks invullen op de velden, hoe kan dat en hoe los ik het op?
     Number(cell) !== 0
       ? <div class="cell fixed">{cell}</div>
       : <input
@@ -20,27 +18,91 @@ const { puzzle, solution, difficulty } = Astro.props;
   ))}
 </div>
 
+<div class="number-picker">
+  {[1,2,3,4,5,6,7,8,9].map(n => (
+    <div class="number-tile" draggable="true">{n}</div>
+  ))}
+</div>
+
 <script>
   // @ts-nocheck
 
   const inputs = document.querySelectorAll('.cell.empty');
 
-  inputs.forEach((input, i) => {
+  // Alleen cijfers 1–9, max 1 per cel
+  // Bron: https://sentry.io/answers/html-text-input-allow-only-numeric-input/
+  inputs.forEach((input) => {
     input.addEventListener('input', (e) => {
-      // Verwijder alles wat geen cijfer 1-9 is
       const value = e.target.value.replace(/[^1-9]/g, '');
-      // Bewaar alleen het laatste cijfer zodat je niet twee cijfers kunt typen
       e.target.value = value.slice(-1);
-
-      // Verwijder eventuele kleur van een vorige controle
       e.target.classList.remove('correct', 'incorrect');
     });
   });
 
-  const checkButton = document.getElementById('btn-check');
-  const resultText = document.getElementById('result');
+  // ------------------------------------ MARK: Cel selectie
+  inputs.forEach((input) => {
+    input.addEventListener('focus', () => {
+      inputs.forEach(i => {
+        i.classList.remove('selected');
+      });
 
-  // Vul alle lege velden in met het juiste antwoord (alleen voor testen)
+      input.classList.add('selected');
+    });
+
+    // Selectie verwijderen als gebruiker wegklikt
+    input.addEventListener('blur', () => {
+      input.classList.remove('selected');
+    });
+  });
+
+  // ------------------------------------ MARK: Drag & Drop
+  // Bron: https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API
+  // & https://dev.to/anuraggharat/html-drag-and-drop-api-5gd3
+
+  let dragged = null;
+
+  document.querySelectorAll('.number-tile').forEach(tile => {
+    tile.addEventListener('dragstart', (event) => {
+      dragged = event.target;
+      event.target.classList.add('dragging');
+    });
+
+    tile.addEventListener('dragend', (event) => {
+      event.target.classList.remove('dragging');
+    });
+  });
+
+  inputs.forEach(input => {
+    input.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    // Roze achtergrond
+    input.addEventListener('dragenter', (e) => {
+      e.target.classList.add('dragover');
+    });
+
+    input.addEventListener('dragleave', (e) => {
+      e.target.classList.remove('dragover');
+    });
+    
+    input.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.target.classList.remove('dragover');
+      if (dragged) {
+        e.target.value = dragged.textContent;
+        e.target.classList.remove('correct', 'incorrect');
+      }
+    });
+  });
+
+  // ------------------------------------ MARK: Validatie
+  // Bron: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+
+  const checkButton = document.getElementById('btn-check');
+  const resultText  = document.getElementById('result');
+
+  // Alleen voor testen: alle cellen invullen met het juiste antwoord
   document.getElementById('btn-fill')?.addEventListener('click', (e) => {
     e.preventDefault();
     inputs.forEach((input) => {
@@ -49,19 +111,16 @@ const { puzzle, solution, difficulty } = Astro.props;
     });
   });
 
-  // ?. zodat er geen crash is als de knop niet op de pagina staat
   checkButton?.addEventListener('click', () => {
     let incorrectCount = 0;
 
     inputs.forEach((input) => {
       const entered  = Number(input.value);
       const expected = Number(input.dataset.solution);
-
-      // Verwijder eerst oude kleuren
       input.classList.remove('correct', 'incorrect');
 
       if (input.value === '') {
-        // Leeg gelaten: geen kleur
+        // Leeg: geen kleur
       } else if (entered === expected) {
         input.classList.add('correct');
       } else {
@@ -70,34 +129,32 @@ const { puzzle, solution, difficulty } = Astro.props;
       }
     });
 
-    // Resultaat weergeven
     if (incorrectCount === 0) {
-      // Controleer of alle lege cellen ook echt zijn ingevuld
       const allFilled = Array.from(inputs).every(input => input.value !== '');
 
       if (allFilled) {
         resultText.textContent = 'All correct!';
 
-        // Haal een dad joke op als beloning
-        fetch('https://icanhazdadjoke.com/', {
-          headers: { 'Accept': 'application/json' }
-        })
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('joke').textContent = data.joke;
+        // Dad joke
+        fetch('https://icanhazdadjoke.com/', { headers: { 'Accept': 'application/json' } })
+          .then(res => {
+            return res.json();
+          })
+          .then(data => {
+            // Sessie als opgelost markeren in localStorage
+            const sessions     = JSON.parse(localStorage.getItem('sessions') || '[]');
+            const currentStart = Number(localStorage.getItem('currentSession'));
+            const session      = sessions.find(s => s.startTime === currentStart);
+            if (session) {
+              session.solved     = true;
+              session.endTime    = Date.now();
+              session.difficulty = document.querySelector('.sudoku-grid').dataset.difficulty;
+              session.joke       = data.joke;
+              localStorage.setItem('sessions', JSON.stringify(sessions));
+            }
 
-          // Sla de opgeloste sessie op in localStorage
-          const sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
-          const currentStart = Number(localStorage.getItem('currentSession'));
-          const session = sessions.find(s => s.startTime === currentStart);
-          if (session) {
-            session.solved = true;
-            session.endTime = Date.now();
-            session.difficulty = document.querySelector('.sudoku-grid').dataset.difficulty;
-            session.joke = data.joke;
-            localStorage.setItem('sessions', JSON.stringify(sessions));
-          }
-        });
+            toonJokePopup(data.joke);
+          });
 
       } else {
         resultText.textContent = 'Almost! Some cells are still empty.';
@@ -107,56 +164,170 @@ const { puzzle, solution, difficulty } = Astro.props;
       resultText.textContent = `${incorrectCount} cell${incorrectCount === 1 ? '' : 's'} are incorrect.`;
     }
   });
+
+  // ------------------------------------ MARK: Joke popup
+
+  function toonJokePopup(joke) {
+    // Confetti in drie golven
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 },
+      colors: ['#f472b6', '#f5f0e8', '#ffffff', '#fda4d0'] });
+
+    setTimeout(() => {
+      confetti({ particleCount: 60, angle: 60,  spread: 55, origin: { x: 0 },
+        colors: ['#f472b6', '#f5f0e8'] });
+      confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1 },
+        colors: ['#f472b6', '#f5f0e8'] });
+    }, 300);
+
+    // Splits de joke in vraag en antwoord op de ?
+    // Bron: Claude. Prompt: hoe kan ik een dad joke splitsen in een vraag en antwoord als de scheiding een ? is
+    const parts = joke.split('? ');
+    if (parts.length > 1) {
+      document.getElementById('joke-vraag').textContent = '"' + parts[0] + '?"';
+      document.getElementById('joke-antwoord').textContent = parts.slice(1).join('? ');
+    } else {
+      document.getElementById('joke-vraag').textContent = '"' + joke + '"';
+      document.getElementById('joke-antwoord').textContent = '';
+    }
+
+    document.getElementById('joke-bg').classList.remove('verborgen');
+  }
+
+  // Play again: nieuwe puzzel laden met dezelfde voorkeur
+  // Bron: https://dev.to/jmjkim/how-to-keep-input-values-even-after-reloading-your-browser-4mm5
+  document.getElementById('btn-again')?.addEventListener('click', () => {
+    const preference = localStorage.getItem('preference') || 'none';
+    sessionStorage.removeItem('sessionStarted');
+    window.location.href = `/?preference=${preference}`;
+  });
 </script>
 
 <style is:global>
-  .sudoku-grid {
-    display: grid;
-    grid-template-columns: repeat(9, 48px);
-    grid-template-rows: repeat(9, 48px);
-    width: 432px;
-    border: 2px solid black;
-    overflow: hidden;
+  :root{
+    --cell: clamp(30px, calc((100vw - 2.5em) / 9.2), 48px);
   }
 
-  .cell {
+  .sudoku-grid{
+    display: grid;
+    grid-template-columns: repeat(9, var(--cell));
+    grid-template-rows: repeat(9, var(--cell));
+    width: calc(9 * var(--cell));
+    border: 2px solid var(--line-thick);
+    overflow: hidden;
+    border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .cell{
     display: flex;
     align-items: center;
     justify-content: center;
-
-    width: 48px;
-    height: 48px;
+    width: var(--cell);
+    height: var(--cell);
     min-width: 0;
-
-    border: 1px solid #ccc;
-    font-size: 1.2rem;
+    border: 1px solid var(--line-thin);
+    font-size: clamp(0.8em, 3.5vw, 1.2em);
     text-align: center;
     box-sizing: border-box;
+    transition: background 0.15s ease;
   }
 
-  .cell:nth-child(3n) { border-right: 2px solid black; }
-  .cell:nth-child(n+19):nth-child(-n+27) { border-bottom: 2px solid black; }
-  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid black; }
+  /* Dikke lijnen voor de 3×3 vakken, dunne lijnen binnen elk vak */
+  /* Bron: https://codepen.io/sdobson/pen/aEWBQw & Claude. Prompt: hoe krijg ik met nth-child de rijen 3 en 6 in een sudoku grid */
+  .cell:nth-child(3n){
+    border-right: 2px solid var(--line-thick);
+  }
 
-  .fixed {
-    background: #eeebeb;
+  .cell:nth-child(n+19):nth-child(-n+27){
+    border-bottom: 2px solid var(--line-thick);
+  }
+
+  .cell:nth-child(n+46):nth-child(-n+54){
+    border-bottom: 2px solid var(--line-thick);
+  }
+
+  .fixed{
+    background: var(--cell-grey);
+    color: var(--black);
     font-weight: bold;
   }
 
-  .empty {
-    border: none;
-    width: 48px;
-    height: 48px;
+  .empty{
+    border: 1px solid var(--line-thin);
+    width: var(--cell);
+    height: var(--cell);
     text-align: center;
-    font-size: 1.2rem;
-    background: white;
+    font-size: clamp(0.8em, 3.5vw, 1.2em);
+    background: var(--cell-white);
+    color: var(--black);
     box-sizing: border-box;
     padding: 0;
+    outline: none;
+    caret-color: var(--pink);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  /* Geselecteerde cel wordt paars bij klikken */
+  .empty:focus,
+  .empty.selected{
+    background: var(--cell-purple);
+    border-color: var(--purple-border);
+    z-index: 1;
   }
 
   .empty::-webkit-inner-spin-button,
-  .empty::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .empty::-webkit-outer-spin-button{
+    -webkit-appearance: none;
+  }
 
-  .empty.correct   { background: #c8f7c5; }
-  .empty.incorrect { background: #f7c5c5; }
+  .empty.correct{
+    background: var(--green-bg);
+    color: var(--green-text);
+  }
+
+  .empty.incorrect{
+    background: var(--red-bg);
+    color: var(--red-text);
+  }
+
+  .empty.dragover{
+    background: var(--drag-pink);
+    border-color: var(--pink);
+  }
+
+  .number-picker{
+    display: flex;
+    gap: clamp(3px, 1vw, 6px);
+    margin-top: 1em;
+    width: calc(9 * var(--cell));
+    justify-content: center;
+  }
+
+  .number-tile{
+    width: calc(var(--cell) * 0.82);
+    height: calc(var(--cell) * 0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1.5px solid var(--pink);
+    color: var(--pink);
+    font-size: clamp(0.75em, 3vw, 1.1em);
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: grab;
+    user-select: none;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  }
+
+  .number-tile:hover{
+    background: var(--pink);
+    color: var(--dark);
+    transform: scale(1.1);
+  }
+
+  .number-tile.dragging{
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
 </style>
